@@ -1,0 +1,41 @@
+{
+  "pins" : [
+    {
+      "identity" : "waktrainercoremodels",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/WakTrainerCoreModels",
+      "state" : {
+        "branch" : "main",
+        "revision" : "83718f1b36326539713ea1863e0cf7a69caa1c2f"
+      }
+    },
+    {
+      "identity" : "waktrainerfeaturetimer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/WakTrainerFeatureTimer",
+      "state" : {
+        "branch" : "main",
+        "revision" : "03cd6bfa8d4d3c224a2f05580fa77e25cebbcaed"
+      }
+    },
+    {
+      "identity" : "waktrainerservicehealthkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/WakTrainerServiceHealthKit",
+      "state" : {
+        "branch" : "main",
+        "revision" : "37872b07257c2fcdb150dc633c76cfdda637272f"
+      }
+    },
+    {
+      "identity" : "waktrainerservicelocation",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/iosdevbyul/WakTrainerServiceLocation",
+      "state" : {
+        "branch" : "main",
+        "revision" : "951e5c2394b86d99cf0daf314a89c06d73bc8781"
+      }
+    }
+  ],
+  "version" : 2
+}
