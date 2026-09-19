@@ -1,8 +1,30 @@
 import Testing
+import WakTrainerCoreModels
 @testable import WakTrainerDomainWorkout
 
-@Test func example() async throws {
-    // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-    // Swift Testing Documentation
-    // https://developer.apple.com/documentation/testing
+struct WorkoutDefinitionTests {
+
+    @Test
+    func dynamicWorkoutRequiresLocationTracking() {
+        let workout = WorkoutDefinition(
+            id: "running",
+            name: "달리기",
+            category: .cardio,
+            type: .dynamicWorkout
+        )
+
+        #expect(workout.requiresLocationTracking)
+    }
+
+    @Test
+    func staticWorkoutDoesNotRequireLocationTracking() {
+        let workout = WorkoutDefinition(
+            id: "squat",
+            name: "스쿼트",
+            category: .strength,
+            type: .staticWorkout
+        )
+
+        #expect(workout.requiresLocationTracking == false)
+    }
 }
