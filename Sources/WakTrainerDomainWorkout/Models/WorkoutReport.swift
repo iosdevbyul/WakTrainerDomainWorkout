@@ -146,8 +146,32 @@ public struct WorkoutStrengthReport: Equatable, Sendable {
     }
 }
 
+public struct WorkoutCardioSplit: Identifiable, Equatable, Sendable {
+    public let index: Int
+    public let distanceMeters: Double
+    public let duration: TimeInterval
+    public let paceSecondsPerKilometer: TimeInterval
+
+    public var id: Int {
+        index
+    }
+
+    public init(
+        index: Int,
+        distanceMeters: Double,
+        duration: TimeInterval,
+        paceSecondsPerKilometer: TimeInterval
+    ) {
+        self.index = index
+        self.distanceMeters = distanceMeters
+        self.duration = duration
+        self.paceSecondsPerKilometer = paceSecondsPerKilometer
+    }
+}
+
 public struct WorkoutCardioReport: Equatable, Sendable {
     public let distanceMeters: Double?
+    public let routeDistanceMeters: Double?
     public let averageSpeedMetersPerSecond: Double?
     public let maximumSpeedMetersPerSecond: Double?
     public let averagePaceSecondsPerKilometer: TimeInterval?
@@ -155,18 +179,22 @@ public struct WorkoutCardioReport: Equatable, Sendable {
     public let averagePowerWatts: Double?
     public let elevationGainMeters: Double?
     public let routePointCount: Int
+    public let splits: [WorkoutCardioSplit]
 
     public init(
         distanceMeters: Double?,
+        routeDistanceMeters: Double?,
         averageSpeedMetersPerSecond: Double?,
         maximumSpeedMetersPerSecond: Double?,
         averagePaceSecondsPerKilometer: TimeInterval?,
         averageCadence: Double?,
         averagePowerWatts: Double?,
         elevationGainMeters: Double?,
-        routePointCount: Int
+        routePointCount: Int,
+        splits: [WorkoutCardioSplit] = []
     ) {
         self.distanceMeters = distanceMeters
+        self.routeDistanceMeters = routeDistanceMeters
         self.averageSpeedMetersPerSecond = averageSpeedMetersPerSecond
         self.maximumSpeedMetersPerSecond = maximumSpeedMetersPerSecond
         self.averagePaceSecondsPerKilometer = averagePaceSecondsPerKilometer
@@ -174,5 +202,6 @@ public struct WorkoutCardioReport: Equatable, Sendable {
         self.averagePowerWatts = averagePowerWatts
         self.elevationGainMeters = elevationGainMeters
         self.routePointCount = routePointCount
+        self.splits = splits
     }
 }
