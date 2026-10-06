@@ -192,6 +192,101 @@ struct WorkoutReportBuilderTests {
         #expect(report.strength == nil)
     }
 
+
+    @Test("HealthKit 거리가 없으면 GPS route 거리와 1km split을 사용한다")
+    func cardioReportFallsBackToRouteDistanceAndBuildsSplits() throws {
+        let start = Date(
+            timeIntervalSince1970: 1_800_000_000
+        )
+
+        let route = [
+            routePoint(
+                timestamp: start,
+                latitude: 37.5000,
+                longitude: 127.0000,
+                altitude: 10,
+                verticalAccuracy: 5
+            ),
+            routePoint(
+                timestamp: start.addingTimeInterval(300),
+                latitude: 37.5090,
+                longitude: 127.0000,
+                altitude: 12,
+                verticalAccuracy: 5
+            ),
+            routePoint(
+                timestamp: start.addingTimeInterval(600),
+                latitude: 37.5180,
+                longitude: 127.0000,
+                altitude: 14,
+                verticalAccuracy: 5
+            )
+        ]
+
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "running",
+                name: "달리기",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(600),
+                elapsedDuration: 600,
+                activeDuration: 600,
+                pausedDuration: 0
+            ),
+            exerciseRecords: [
+                WorkoutExerciseRecord(
+                    exerciseID: "running",
+                    name: "달리기",
+                    kind: .cardio,
+                    startDate: start,
+                    endDate: start.addingTimeInterval(600)
+                )
+            ],
+            route: route
+        )
+
+        let report = WorkoutReportBuilder()
+            .makeReport(from: session)
+
+        let cardio = try #require(report.cardio)
+        let distance = try #require(
+            cardio.distanceMeters
+        )
+        let routeDistance = try #require(
+            cardio.routeDistanceMeters
+        )
+        let pace = try #require(
+            cardio.averagePaceSecondsPerKilometer
+        )
+        let speed = try #require(
+            cardio.averageSpeedMetersPerSecond
+        )
+
+        #expect(abs(distance - 2_000) < 20)
+        #expect(abs(routeDistance - distance) < 0.001)
+        #expect(abs(pace - 300) < 5)
+        #expect(abs(speed - 3.33) < 0.1)
+        #expect(cardio.splits.count == 2)
+        #expect(
+            cardio.splits.allSatisfy {
+                abs($0.distanceMeters - 1_000) < 0.001
+            }
+        )
+        #expect(
+            cardio.splits.allSatisfy {
+                abs($0.paceSecondsPerKilometer - 300) < 5
+            }
+        )
+        #expect(
+            report.summary.distanceMeters
+                == cardio.distanceMeters
+        )
+    }
+
     @Test("수직 정확도가 나쁜 route point는 고도 상승 계산에서 제외한다")
     func cardioElevationIgnoresPoorAltitudeAccuracy() throws {
         let start = Date(
@@ -359,16 +454,19 @@ private extension WorkoutReportBuilderTests {
 
     func routePoint(
         timestamp: Date,
+        latitude: Double = 37.5,
+        longitude: Double = 127,
         altitude: Double,
+        horizontalAccuracy: Double = 5,
         verticalAccuracy: Double
     ) -> WorkoutRoutePoint {
         WorkoutRoutePoint(
             timestamp: timestamp,
-            latitude: 37.5,
-            longitude: 127,
+            latitude: latitude,
+            longitude: longitude,
             altitude: altitude,
             speedMetersPerSecond: nil,
-            horizontalAccuracy: 5,
+            horizontalAccuracy: horizontalAccuracy,
             verticalAccuracy: verticalAccuracy,
             course: nil
         )
