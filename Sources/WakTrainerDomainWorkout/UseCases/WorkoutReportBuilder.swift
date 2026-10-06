@@ -52,6 +52,9 @@ private extension WorkoutReportBuilder {
         from session: WorkoutSession
     ) -> WorkoutReportSummary {
         let health = session.health.summary
+        let routeDistance = routeDistance(
+            from: session.route
+        )
 
         return WorkoutReportSummary(
             elapsedDuration:
@@ -65,7 +68,7 @@ private extension WorkoutReportBuilder {
             stepCount:
                 health.stepCount,
             distanceMeters:
-                health.distanceMeters,
+                health.distanceMeters ?? routeDistance,
             averageHeartRate:
                 health.averageHeartRate,
             minimumHeartRate:
@@ -275,7 +278,13 @@ private extension WorkoutReportBuilder {
         }
 
         let health = session.health.summary
-        let distance = health.distanceMeters
+        let routeDistance = routeDistance(
+            from: session.route
+        )
+
+        let distance =
+            health.distanceMeters ??
+            routeDistance
 
         let averagePace: TimeInterval?
 
@@ -289,13 +298,31 @@ private extension WorkoutReportBuilder {
             averagePace = nil
         }
 
+        let routeAverageSpeed: Double?
+
+        if let routeDistance,
+           routeDistance > 0,
+           session.timing.activeDuration > 0 {
+            routeAverageSpeed =
+                routeDistance /
+                session.timing.activeDuration
+        } else {
+            routeAverageSpeed = nil
+        }
+
         return WorkoutCardioReport(
             distanceMeters:
                 distance,
+            routeDistanceMeters:
+                routeDistance,
             averageSpeedMetersPerSecond:
-                health.averageSpeedMetersPerSecond,
+                health.averageSpeedMetersPerSecond ??
+                routeAverageSpeed,
             maximumSpeedMetersPerSecond:
-                health.maximumSpeedMetersPerSecond,
+                health.maximumSpeedMetersPerSecond ??
+                maximumRouteSpeed(
+                    from: session.route
+                ),
             averagePaceSecondsPerKilometer:
                 averagePace,
             averageCadence:
@@ -308,7 +335,11 @@ private extension WorkoutReportBuilder {
                     from: session.route
                 ),
             routePointCount:
-                session.route.count
+                session.route.count,
+            splits:
+                cardioSplits(
+                    from: session.route
+                )
         )
     }
 
@@ -384,5 +415,207 @@ private extension WorkoutReportBuilder {
 
         return accuracy >= 0 &&
         accuracy <= 20
+    }
+
+    func routeDistance(
+        from route: [WorkoutRoutePoint]
+    ) -> Double? {
+        let points = usableRoutePoints(
+            from: route
+        )
+
+        guard points.count >= 2 else {
+            return nil
+        }
+
+        var totalDistance: Double = 0
+
+        for index in 1..<points.count {
+            totalDistance += haversineDistance(
+                from: points[index - 1],
+                to: points[index]
+            )
+        }
+
+        return totalDistance > 0
+            ? totalDistance
+            : nil
+    }
+
+    func maximumRouteSpeed(
+        from route: [WorkoutRoutePoint]
+    ) -> Double? {
+        route
+            .compactMap(\.speedMetersPerSecond)
+            .filter { $0 >= 0 }
+            .max()
+    }
+
+    func cardioSplits(
+        from route: [WorkoutRoutePoint]
+    ) -> [WorkoutCardioSplit] {
+        let points = usableRoutePoints(
+            from: route
+        )
+
+        guard points.count >= 2 else {
+            return []
+        }
+
+        let splitTargetMeters = 1_000.0
+        let minimumPartialSplitMeters = 100.0
+
+        var result: [WorkoutCardioSplit] = []
+        var splitIndex = 1
+        var accumulatedDistance: Double = 0
+        var accumulatedDuration: TimeInterval = 0
+
+        for index in 1..<points.count {
+            let previous = points[index - 1]
+            let current = points[index]
+
+            let segmentDistance = haversineDistance(
+                from: previous,
+                to: current
+            )
+
+            let segmentDuration =
+                current.timestamp
+                    .timeIntervalSince(
+                        previous.timestamp
+                    )
+
+            guard segmentDistance > 0,
+                  segmentDuration > 0 else {
+                continue
+            }
+
+            var remainingDistance = segmentDistance
+            var remainingDuration = segmentDuration
+
+            while remainingDistance > 0 {
+                let distanceNeeded =
+                    splitTargetMeters -
+                    accumulatedDistance
+
+                if remainingDistance >= distanceNeeded {
+                    let ratio =
+                        distanceNeeded /
+                        remainingDistance
+
+                    let usedDuration =
+                        remainingDuration *
+                        ratio
+
+                    accumulatedDistance +=
+                        distanceNeeded
+                    accumulatedDuration +=
+                        usedDuration
+
+                    result.append(
+                        WorkoutCardioSplit(
+                            index: splitIndex,
+                            distanceMeters:
+                                accumulatedDistance,
+                            duration:
+                                accumulatedDuration,
+                            paceSecondsPerKilometer:
+                                accumulatedDuration
+                        )
+                    )
+
+                    splitIndex += 1
+                    remainingDistance -=
+                        distanceNeeded
+                    remainingDuration -=
+                        usedDuration
+                    accumulatedDistance = 0
+                    accumulatedDuration = 0
+                } else {
+                    accumulatedDistance +=
+                        remainingDistance
+                    accumulatedDuration +=
+                        remainingDuration
+                    remainingDistance = 0
+                    remainingDuration = 0
+                }
+            }
+        }
+
+        if accumulatedDistance >=
+            minimumPartialSplitMeters,
+           accumulatedDuration > 0 {
+            result.append(
+                WorkoutCardioSplit(
+                    index: splitIndex,
+                    distanceMeters:
+                        accumulatedDistance,
+                    duration:
+                        accumulatedDuration,
+                    paceSecondsPerKilometer:
+                        accumulatedDuration /
+                        (accumulatedDistance / 1_000)
+                )
+            )
+        }
+
+        return result
+    }
+
+    func usableRoutePoints(
+        from route: [WorkoutRoutePoint]
+    ) -> [WorkoutRoutePoint] {
+        route
+            .filter(isUsableHorizontalLocation)
+            .sorted {
+                $0.timestamp < $1.timestamp
+            }
+    }
+
+    func isUsableHorizontalLocation(
+        _ point: WorkoutRoutePoint
+    ) -> Bool {
+        guard let accuracy =
+                point.horizontalAccuracy else {
+            return true
+        }
+
+        return accuracy >= 0 &&
+        accuracy <= 50
+    }
+
+    func haversineDistance(
+        from start: WorkoutRoutePoint,
+        to end: WorkoutRoutePoint
+    ) -> Double {
+        let earthRadiusMeters = 6_371_000.0
+
+        let startLatitude =
+            start.latitude * .pi / 180
+        let endLatitude =
+            end.latitude * .pi / 180
+
+        let latitudeDelta =
+            (end.latitude - start.latitude) *
+            .pi / 180
+
+        let longitudeDelta =
+            (end.longitude - start.longitude) *
+            .pi / 180
+
+        let a =
+            sin(latitudeDelta / 2) *
+            sin(latitudeDelta / 2) +
+            cos(startLatitude) *
+            cos(endLatitude) *
+            sin(longitudeDelta / 2) *
+            sin(longitudeDelta / 2)
+
+        let c = 2 * atan2(
+            sqrt(a),
+            sqrt(1 - a)
+        )
+
+        return earthRadiusMeters * c
     }
 }
