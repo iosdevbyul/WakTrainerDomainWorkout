@@ -199,27 +199,28 @@ private extension WorkoutReportBuilder {
             partialResult,
             set in
 
-            partialResult + set.volumeKilograms
+            partialResult + (set.volumeKilograms ?? 0)
         }
 
         let totalRepetitions = performanceSets.reduce(0) {
             partialResult,
             set in
 
-            partialResult + set.repetitions
+            partialResult + (set.repetitions ?? 0)
         }
 
         let bestEstimatedOneRepMax = performanceSets
-            .filter {
-                $0.weightKilograms > 0 &&
-                $0.repetitions > 0
-            }
-            .map {
-                estimatedOneRepMax(
-                    weightKilograms:
-                        $0.weightKilograms,
-                    repetitions:
-                        $0.repetitions
+            .compactMap { set -> Double? in
+                guard let weight = set.weightKilograms,
+                      let repetitions = set.repetitions,
+                      weight > 0,
+                      repetitions > 0 else {
+                    return nil
+                }
+
+                return estimatedOneRepMax(
+                    weightKilograms: weight,
+                    repetitions: repetitions
                 )
             }
             .max()
@@ -249,7 +250,7 @@ private extension WorkoutReportBuilder {
                 totalVolume,
             maximumWeightKilograms:
                 performanceSets
-                    .map(\.weightKilograms)
+                    .compactMap(\.weightKilograms)
                     .max(),
             bestEstimatedOneRepMaxKilograms:
                 bestEstimatedOneRepMax,
