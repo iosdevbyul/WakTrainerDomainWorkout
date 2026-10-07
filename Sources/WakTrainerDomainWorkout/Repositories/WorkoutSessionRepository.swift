@@ -38,6 +38,10 @@ public protocol WorkoutSessionRepository: AnyObject {
     func fetchSession(id: UUID) async throws -> StoredWorkoutSession?
     func fetchSessions() async throws -> [StoredWorkoutSession]
     func fetchIncompleteSessions() async throws -> [StoredWorkoutSession]
+    func fetchCompletedSessions(
+        from startDate: Date,
+        to endDate: Date
+    ) async throws -> [StoredWorkoutSession]
     func deleteSession(id: UUID) async throws
     func deleteAllSessions() async throws
 }
