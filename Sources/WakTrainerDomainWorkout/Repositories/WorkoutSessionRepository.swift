@@ -31,7 +31,8 @@ public struct StoredWorkoutSession: Equatable, Sendable {
     }
 }
 
-public protocol WorkoutSessionRepository: Sendable {
+@MainActor
+public protocol WorkoutSessionRepository: AnyObject {
     func saveCheckpoint(_ session: WorkoutSession) async throws
     func saveCompleted(_ session: WorkoutSession) async throws
     func fetchSession(id: UUID) async throws -> StoredWorkoutSession?
