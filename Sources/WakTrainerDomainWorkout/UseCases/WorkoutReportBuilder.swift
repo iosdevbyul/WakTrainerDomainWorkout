@@ -56,6 +56,9 @@ private extension WorkoutReportBuilder {
             from: session
         )
 
+        let heart = activeHeartRateStatistics(from: session)
+        let hasPauses = !session.timing.pauseIntervals.isEmpty
+
         return WorkoutReportSummary(
             elapsedDuration:
                 session.timing.elapsedDuration,
@@ -70,34 +73,58 @@ private extension WorkoutReportBuilder {
             distanceMeters:
                 health.distanceMeters ?? routeDistance,
             averageHeartRate:
-                health.averageHeartRate,
+                hasPauses ? heart?.average : health.averageHeartRate,
             minimumHeartRate:
-                health.minimumHeartRate,
+                hasPauses ? heart?.minimum : health.minimumHeartRate,
             maximumHeartRate:
-                health.maximumHeartRate
+                hasPauses ? heart?.maximum : health.maximumHeartRate
+        )
+    }
+
+    func activeHeartRateSamples(
+        from session: WorkoutSession
+    ) -> [WorkoutHealthMetricSample] {
+        let raw = session.health.samples(for: .heartRate)
+        guard !session.timing.pauseIntervals.isEmpty else {
+            return raw
+        }
+        return WorkoutActivitySamplePartition(
+            pauseIntervals: session.timing.pauseIntervals
+        ).activeHealthSamples(from: raw)
+    }
+
+    func activeHeartRateStatistics(
+        from session: WorkoutSession
+    ) -> (average: Double, minimum: Double, maximum: Double)? {
+        let values = activeHeartRateSamples(from: session)
+            .map(\.value)
+            .filter { $0.isFinite && $0 > 0 }
+        guard !values.isEmpty else { return nil }
+        return (
+            average: values.reduce(0, +) / Double(values.count),
+            minimum: values.min()!,
+            maximum: values.max()!
         )
     }
 
     func makeHeartReport(
         from session: WorkoutSession
     ) -> WorkoutHeartReport {
-        let heartRateSamples = session.health.samples(
-            for: .heartRate
-        )
+        let samples = activeHeartRateSamples(from: session)
+        let hasPauses = !session.timing.pauseIntervals.isEmpty
+        let statistics = hasPauses
+            ? activeHeartRateStatistics(from: session)
+            : nil
 
         return WorkoutHeartReport(
             averageHeartRate:
-                session.health.summary.averageHeartRate,
+                hasPauses ? statistics?.average : session.health.summary.averageHeartRate,
             minimumHeartRate:
-                session.health.summary.minimumHeartRate,
+                hasPauses ? statistics?.minimum : session.health.summary.minimumHeartRate,
             maximumHeartRate:
-                session.health.summary.maximumHeartRate,
-            sampleCount:
-                heartRateSamples.count,
-            zones:
-                makeHeartRateZones(
-                    from: heartRateSamples
-                )
+                hasPauses ? statistics?.maximum : session.health.summary.maximumHeartRate,
+            sampleCount: samples.count,
+            zones: makeHeartRateZones(from: samples)
         )
     }
 
