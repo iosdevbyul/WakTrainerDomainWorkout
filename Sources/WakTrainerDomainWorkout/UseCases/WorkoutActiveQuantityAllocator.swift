@@ -75,6 +75,87 @@ public struct WorkoutActiveQuantityAllocator: Sendable {
         }
     }
 
+    /// Returns nil unless the supplied samples cover every active instant.
+    /// Samples extending beyond the workout are rejected to avoid counting
+    /// quantities acquired in another workout.
+    public func verifiedActiveTotal(
+        for metric: WorkoutHealthMetric,
+        in samples: [WorkoutHealthMetricSample],
+        workoutStart: Date,
+        workoutEnd: Date
+    ) -> Double? {
+        guard workoutEnd > workoutStart else { return nil }
+        let relevant = samples.filter { $0.metric == metric }
+        guard !relevant.isEmpty,
+              relevant.allSatisfy({
+                  $0.startDate >= workoutStart &&
+                  $0.endDate <= workoutEnd
+              }),
+              hasCompleteActiveCoverage(
+                  samples: relevant,
+                  workoutStart: workoutStart,
+                  workoutEnd: workoutEnd
+              ) else {
+            return nil
+        }
+        return activeTotal(for: metric, in: relevant)
+    }
+
+    /// Only a single distance category with complete active coverage is usable.
+    public func verifiedActiveDistance(
+        in samples: [WorkoutHealthMetricSample],
+        workoutStart: Date,
+        workoutEnd: Date
+    ) -> Double? {
+        let types: [WorkoutHealthMetric] = [
+            .distanceWalkingRunning, .distanceCycling, .distanceSwimming
+        ]
+        let present = types.filter { metric in
+            samples.contains { $0.metric == metric }
+        }
+        guard present.count == 1, let metric = present.first else {
+            return nil
+        }
+        return verifiedActiveTotal(
+            for: metric,
+            in: samples,
+            workoutStart: workoutStart,
+            workoutEnd: workoutEnd
+        )
+    }
+
+    /// Checks continuity of sample windows after subtracting pauses.
+    /// A missing interval entirely inside a pause is not a coverage gap.
+    public func hasCompleteActiveCoverage(
+        samples: [WorkoutHealthMetricSample],
+        workoutStart: Date,
+        workoutEnd: Date
+    ) -> Bool {
+        guard workoutEnd > workoutStart else { return false }
+        let windows = samples
+            .filter {
+                $0.endDate > $0.startDate &&
+                $0.value.isFinite && $0.value >= 0
+            }
+            .map { ($0.startDate, $0.endDate) }
+            .sorted { $0.0 < $1.0 }
+
+        // Pause windows count as covered time for the purpose of identifying
+        // gaps, but contribute no quantity to the active total.
+        let coverage = (windows + pauses.map { ($0.startDate, $0.endDate) })
+            .map { (max($0.0, workoutStart), min($0.1, workoutEnd)) }
+            .filter { $0.1 > $0.0 }
+            .sorted { $0.0 < $1.0 }
+
+        var cursor = workoutStart
+        for (start, end) in coverage {
+            if start > cursor { return false }
+            if end > cursor { cursor = end }
+            if cursor >= workoutEnd { return true }
+        }
+        return false
+    }
+
     /// Only use HealthKit distance when a single distance type is present.
     /// Different types may describe the same movement and must not be summed.
     public func unambiguousActiveDistance(
