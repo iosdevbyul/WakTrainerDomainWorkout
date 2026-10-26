@@ -58,6 +58,18 @@ private extension WorkoutReportBuilder {
 
         let heart = activeHeartRateStatistics(from: session)
         let hasPauses = !session.timing.pauseIntervals.isEmpty
+        let quantities = WorkoutActiveQuantityAllocator(
+            pauseIntervals: session.timing.pauseIntervals
+        )
+        let activeCalories = hasPauses
+            ? quantities.activeTotal(for: .activeEnergyBurned, in: session.health.samples)
+            : health.activeCalories
+        let activeSteps = hasPauses
+            ? quantities.activeTotal(for: .stepCount, in: session.health.samples)
+            : health.stepCount
+        let activeDistance = hasPauses
+            ? (quantities.unambiguousActiveDistance(in: session.health.samples) ?? routeDistance)
+            : (health.distanceMeters ?? routeDistance)
 
         return WorkoutReportSummary(
             elapsedDuration:
@@ -67,11 +79,11 @@ private extension WorkoutReportBuilder {
             pausedDuration:
                 session.timing.pausedDuration,
             activeCalories:
-                health.activeCalories,
+                activeCalories,
             stepCount:
-                health.stepCount,
+                activeSteps,
             distanceMeters:
-                health.distanceMeters ?? routeDistance,
+                activeDistance,
             averageHeartRate:
                 hasPauses ? heart?.average : health.averageHeartRate,
             minimumHeartRate:
@@ -309,9 +321,12 @@ private extension WorkoutReportBuilder {
             from: session
         )
 
-        let distance =
-            health.distanceMeters ??
-            routeDistance
+        let quantities = WorkoutActiveQuantityAllocator(
+            pauseIntervals: session.timing.pauseIntervals
+        )
+        let distance = session.timing.pauseIntervals.isEmpty
+            ? (health.distanceMeters ?? routeDistance)
+            : (quantities.unambiguousActiveDistance(in: session.health.samples) ?? routeDistance)
 
         let averagePace: TimeInterval?
 
