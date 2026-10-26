@@ -331,15 +331,12 @@ private extension WorkoutReportBuilder {
                 health.averagePowerWatts,
             elevationGainMeters:
                 health.elevationGainMeters ??
-                activeRouteSegments(from: session)
-                    .compactMap { elevationGain(from: $0) }
-                    .reduce(0, +),
+                activeElevationGain(from: session),
             routePointCount:
                 activeRouteSegments(from: session)
                     .reduce(0) { $0 + $1.count },
             splits:
-                activeRouteSegments(from: session)
-                    .flatMap { cardioSplits(from: $0) }
+                activeCardioSplits(from: session)
         )
     }
 
@@ -423,6 +420,30 @@ private extension WorkoutReportBuilder {
         WorkoutActivitySamplePartition(
             pauseIntervals: session.timing.pauseIntervals
         ).activeRouteSegments(from: session.route)
+    }
+
+    func activeElevationGain(
+        from session: WorkoutSession
+    ) -> Double? {
+        let gains = activeRouteSegments(from: session)
+            .compactMap { elevationGain(from: $0) }
+        guard !gains.isEmpty else { return nil }
+        return gains.reduce(0, +)
+    }
+
+    func activeCardioSplits(
+        from session: WorkoutSession
+    ) -> [WorkoutCardioSplit] {
+        let splits = activeRouteSegments(from: session)
+            .flatMap { cardioSplits(from: $0) }
+        return splits.enumerated().map { offset, split in
+            WorkoutCardioSplit(
+                index: offset + 1,
+                distanceMeters: split.distanceMeters,
+                duration: split.duration,
+                paceSecondsPerKilometer: split.paceSecondsPerKilometer
+            )
+        }
     }
 
     func activeRouteDistance(
