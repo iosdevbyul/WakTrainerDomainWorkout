@@ -35,7 +35,35 @@ public struct WorkoutActiveQuantityAllocator: Sendable {
             $0.endDate > $0.startDate
         }
         guard !relevant.isEmpty else { return nil }
-        return relevant.reduce(0.0) { total, sample in
+
+        // Duplicate deliveries with the same HealthKit identity are harmless,
+        // but conflicting payloads for that identity cannot be trusted.
+        var byID: [UUID: WorkoutHealthMetricSample] = [:]
+        for sample in relevant {
+            if let previous = byID[sample.id], previous != sample {
+                return nil
+            }
+            byID[sample.id] = sample
+        }
+        let unique = byID.values.sorted {
+            if $0.startDate == $1.startDate {
+                return $0.endDate < $1.endDate
+            }
+            return $0.startDate < $1.startDate
+        }
+
+        // Different IDs with overlapping collection windows may represent
+        // duplicate sources. Do not silently double-count either source.
+        // Adjacent intervals are safe; partial overlaps are not.
+        var latestEnd: Date?
+        for sample in unique {
+            if let latestEnd, sample.startDate < latestEnd {
+                return nil
+            }
+            latestEnd = sample.endDate
+        }
+
+        return unique.reduce(0.0) { total, sample in
             let duration = sample.endDate.timeIntervalSince(sample.startDate)
             let paused = pauses.reduce(0.0) { accumulated, pause in
                 let start = max(sample.startDate, pause.startDate)

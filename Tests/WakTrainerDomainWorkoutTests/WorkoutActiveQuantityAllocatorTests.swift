@@ -116,6 +116,77 @@ struct WorkoutActiveQuantityAllocatorTests {
         #expect(session.health.samples.count == 3)
     }
 
+    @Test("Repeated delivery of the same sample ID counts once")
+    func duplicateIdentityIsDeduplicated() {
+        let original = sample(.stepCount, start: 0, end: 10, value: 100)
+        let result = allocator([(3, 7)]).activeTotal(
+            for: .stepCount,
+            in: [original, original]
+        )
+        #expect(result == 60)
+    }
+
+    @Test("Overlapping different sample IDs fail closed instead of double counting")
+    func overlappingDistinctSamplesAreAmbiguous() {
+        let result = allocator([(3, 7)]).activeTotal(
+            for: .stepCount,
+            in: [
+                sample(.stepCount, start: 0, end: 10, value: 100),
+                sample(.stepCount, start: 5, end: 15, value: 100)
+            ]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Adjacent distinct samples can be safely allocated")
+    func adjacentSamplesAreAllowed() {
+        let result = allocator([(3, 7)]).activeTotal(
+            for: .stepCount,
+            in: [
+                sample(.stepCount, start: 0, end: 5, value: 50),
+                sample(.stepCount, start: 5, end: 10, value: 50)
+            ]
+        )
+        #expect(result == 60)
+    }
+
+    @Test("Overlapping samples do not silently override report aggregates")
+    func ambiguousReportQuantityIsUnknown() {
+        let raw = [
+            sample(.activeEnergyBurned, start: 0, end: 10, value: 100),
+            sample(.activeEnergyBurned, start: 5, end: 15, value: 100)
+        ]
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: origin,
+                endDate: origin.addingTimeInterval(15),
+                elapsedDuration: 15,
+                activeDuration: 11,
+                pausedDuration: 4,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: origin.addingTimeInterval(3),
+                        endDate: origin.addingTimeInterval(7)
+                    )
+                ]
+            ),
+            health: WorkoutHealthData(
+                summary: WorkoutHealthSummary(activeCalories: 200),
+                samples: raw
+            )
+        )
+        let report = WorkoutReportBuilder().makeReport(from: session)
+        #expect(report.summary.activeCalories == nil)
+        #expect(session.health.summary.activeCalories == 200)
+        #expect(session.health.samples.count == 2)
+    }
+
     @Test("No pause retains existing aggregate reporting behavior")
     func noPauseRetainsAggregate() {
         let session = WorkoutSession(
