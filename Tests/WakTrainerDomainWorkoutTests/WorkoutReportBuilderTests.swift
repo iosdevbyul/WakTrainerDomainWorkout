@@ -530,6 +530,106 @@ struct WorkoutReportBuilderTests {
         #expect((cardio.routeDistanceMeters ?? 0) < 250)
     }
 
+
+    @Test("Paused heart rate is excluded from average, extrema and zones")
+    func pausedHeartRateIsExcludedFromReports() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func sample(_ second: Double, _ bpm: Double) -> WorkoutHealthMetricSample {
+            WorkoutHealthMetricSample(
+                metric: .heartRate,
+                startDate: start.addingTimeInterval(second),
+                endDate: start.addingTimeInterval(second + 1),
+                value: bpm,
+                unit: "bpm"
+            )
+        }
+        let raw = [sample(5, 100), sample(15, 200), sample(25, 120)]
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(30),
+                elapsedDuration: 30,
+                activeDuration: 20,
+                pausedDuration: 10,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: start.addingTimeInterval(10),
+                        endDate: start.addingTimeInterval(20)
+                    )
+                ]
+            ),
+            health: WorkoutHealthData(
+                summary: WorkoutHealthSummary(
+                    averageHeartRate: 140,
+                    minimumHeartRate: 100,
+                    maximumHeartRate: 200
+                ),
+                samples: raw
+            )
+        )
+        let report = WorkoutReportBuilder(maximumHeartRate: 200).makeReport(from: session)
+        #expect(session.health.samples.count == 3)
+        #expect(report.heart.sampleCount == 2)
+        #expect(report.heart.averageHeartRate == 110)
+        #expect(report.heart.minimumHeartRate == 100)
+        #expect(report.heart.maximumHeartRate == 120)
+        #expect(report.summary.averageHeartRate == 110)
+        #expect(report.summary.maximumHeartRate == 120)
+        #expect(report.heart.zones.reduce(0) { $0 + $1.sampleCount } == 2)
+    }
+
+    @Test("Paused session with no active heart samples does not reuse contaminated aggregate")
+    func noActiveHeartSamplesProducesUnknownHeartStats() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(20),
+                elapsedDuration: 20,
+                activeDuration: 10,
+                pausedDuration: 10,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: start.addingTimeInterval(5),
+                        endDate: start.addingTimeInterval(15)
+                    )
+                ]
+            ),
+            health: WorkoutHealthData(
+                summary: WorkoutHealthSummary(
+                    averageHeartRate: 190,
+                    maximumHeartRate: 190
+                ),
+                samples: [
+                    WorkoutHealthMetricSample(
+                        metric: .heartRate,
+                        startDate: start.addingTimeInterval(8),
+                        endDate: start.addingTimeInterval(9),
+                        value: 190,
+                        unit: "bpm"
+                    )
+                ]
+            )
+        )
+        let report = WorkoutReportBuilder().makeReport(from: session)
+        #expect(report.heart.sampleCount == 0)
+        #expect(report.heart.averageHeartRate == nil)
+        #expect(report.heart.maximumHeartRate == nil)
+        #expect(report.summary.averageHeartRate == nil)
+    }
+
 }
 
 private extension WorkoutReportBuilderTests {
