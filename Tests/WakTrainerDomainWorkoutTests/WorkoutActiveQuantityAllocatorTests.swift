@@ -187,6 +187,93 @@ struct WorkoutActiveQuantityAllocatorTests {
         #expect(session.health.samples.count == 2)
     }
 
+    @Test("Gap during active time makes a cumulative total unknown")
+    func missingActiveCoverageIsUnknown() {
+        let a = allocator([(4, 6)])
+        let samples = [
+            sample(.stepCount, start: 0, end: 2, value: 20),
+            sample(.stepCount, start: 6, end: 10, value: 40)
+        ]
+        #expect(!a.hasCompleteActiveCoverage(
+            samples: samples,
+            workoutStart: origin,
+            workoutEnd: origin.addingTimeInterval(10)
+        ))
+        #expect(a.verifiedActiveTotal(
+            for: .stepCount,
+            in: samples,
+            workoutStart: origin,
+            workoutEnd: origin.addingTimeInterval(10)
+        ) == nil)
+    }
+
+    @Test("Missing samples entirely during a pause do not invalidate active coverage")
+    func pausedOnlyGapIsAcceptable() {
+        let a = allocator([(3, 7)])
+        let samples = [
+            sample(.stepCount, start: 0, end: 3, value: 30),
+            sample(.stepCount, start: 7, end: 10, value: 30)
+        ]
+        #expect(a.hasCompleteActiveCoverage(
+            samples: samples,
+            workoutStart: origin,
+            workoutEnd: origin.addingTimeInterval(10)
+        ))
+        #expect(a.verifiedActiveTotal(
+            for: .stepCount,
+            in: samples,
+            workoutStart: origin,
+            workoutEnd: origin.addingTimeInterval(10)
+        ) == 60)
+    }
+
+    @Test("Sample extending outside workout cannot be allocated to this session")
+    func outsideWorkoutIsRejected() {
+        let a = allocator([(3, 7)])
+        let samples = [sample(.activeEnergyBurned, start: -5, end: 10, value: 150)]
+        #expect(a.verifiedActiveTotal(
+            for: .activeEnergyBurned,
+            in: samples,
+            workoutStart: origin,
+            workoutEnd: origin.addingTimeInterval(10)
+        ) == nil)
+    }
+
+    @Test("Report does not display a partial active total as a complete value")
+    func reportDoesNotReportIncompleteEnergy() {
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: origin,
+                endDate: origin.addingTimeInterval(10),
+                elapsedDuration: 10,
+                activeDuration: 8,
+                pausedDuration: 2,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: origin.addingTimeInterval(4),
+                        endDate: origin.addingTimeInterval(6)
+                    )
+                ]
+            ),
+            health: WorkoutHealthData(
+                summary: WorkoutHealthSummary(activeCalories: 100),
+                samples: [
+                    sample(.activeEnergyBurned, start: 0, end: 2, value: 20),
+                    sample(.activeEnergyBurned, start: 6, end: 10, value: 40)
+                ]
+            )
+        )
+        let report = WorkoutReportBuilder().makeReport(from: session)
+        #expect(report.summary.activeCalories == nil)
+        #expect(session.health.summary.activeCalories == 100)
+    }
+
     @Test("No pause retains existing aggregate reporting behavior")
     func noPauseRetainsAggregate() {
         let session = WorkoutSession(
