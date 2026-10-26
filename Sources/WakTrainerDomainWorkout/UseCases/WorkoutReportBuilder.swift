@@ -62,13 +62,13 @@ private extension WorkoutReportBuilder {
             pauseIntervals: session.timing.pauseIntervals
         )
         let activeCalories = hasPauses
-            ? quantities.activeTotal(for: .activeEnergyBurned, in: session.health.samples)
+            ? verifiedQuantity(.activeEnergyBurned, session: session, allocator: quantities)
             : health.activeCalories
         let activeSteps = hasPauses
-            ? quantities.activeTotal(for: .stepCount, in: session.health.samples)
+            ? verifiedQuantity(.stepCount, session: session, allocator: quantities)
             : health.stepCount
         let activeDistance = hasPauses
-            ? (quantities.unambiguousActiveDistance(in: session.health.samples) ?? routeDistance)
+            ? (verifiedDistance(session: session, allocator: quantities) ?? routeDistance)
             : (health.distanceMeters ?? routeDistance)
 
         return WorkoutReportSummary(
@@ -90,6 +90,32 @@ private extension WorkoutReportBuilder {
                 hasPauses ? heart?.minimum : health.minimumHeartRate,
             maximumHeartRate:
                 hasPauses ? heart?.maximum : health.maximumHeartRate
+        )
+    }
+
+    func verifiedQuantity(
+        _ metric: WorkoutHealthMetric,
+        session: WorkoutSession,
+        allocator: WorkoutActiveQuantityAllocator
+    ) -> Double? {
+        guard let endDate = session.timing.endDate else { return nil }
+        return allocator.verifiedActiveTotal(
+            for: metric,
+            in: session.health.samples,
+            workoutStart: session.timing.startDate,
+            workoutEnd: endDate
+        )
+    }
+
+    func verifiedDistance(
+        session: WorkoutSession,
+        allocator: WorkoutActiveQuantityAllocator
+    ) -> Double? {
+        guard let endDate = session.timing.endDate else { return nil }
+        return allocator.verifiedActiveDistance(
+            in: session.health.samples,
+            workoutStart: session.timing.startDate,
+            workoutEnd: endDate
         )
     }
 
@@ -326,7 +352,7 @@ private extension WorkoutReportBuilder {
         )
         let distance = session.timing.pauseIntervals.isEmpty
             ? (health.distanceMeters ?? routeDistance)
-            : (quantities.unambiguousActiveDistance(in: session.health.samples) ?? routeDistance)
+            : (verifiedDistance(session: session, allocator: quantities) ?? routeDistance)
 
         let averagePace: TimeInterval?
 
