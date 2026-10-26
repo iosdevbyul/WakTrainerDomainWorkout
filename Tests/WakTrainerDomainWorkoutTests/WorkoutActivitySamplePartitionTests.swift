@@ -93,7 +93,8 @@ struct WorkoutActivitySamplePartitionTests {
         let selector = WorkoutActivitySamplePartition(pauseIntervals: [])
         #expect(selector.activeRouteSegments(from: raw) == [raw])
         #expect(selector.pausedRoutePoints(from: raw).isEmpty)
-        #expect(selector.activeHealthSamples(from: [sample(0, 10)]) == [sample(0, 10)])
+        let health = sample(0, 10)
+        #expect(selector.activeHealthSamples(from: [health]) == [health])
     }
 
     @Test("Invalid pause windows are ignored")
