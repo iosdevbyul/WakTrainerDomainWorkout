@@ -448,6 +448,88 @@ struct WorkoutReportBuilderTests {
 
         #expect(report.heart.zones.isEmpty)
     }
+
+    @Test("Paused GPS is retained in session but excluded from report route metrics")
+    func pausedGPSDoesNotInflateRouteMetrics() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let points = [
+            routePoint(timestamp: start, latitude: 37.500, altitude: 10, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(10), latitude: 37.501, altitude: 12, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(20), latitude: 37.510, altitude: 40, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(30), latitude: 37.520, altitude: 80, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(40), latitude: 37.530, altitude: 15, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(50), latitude: 37.531, altitude: 18, verticalAccuracy: 5)
+        ]
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(60),
+                elapsedDuration: 60,
+                activeDuration: 40,
+                pausedDuration: 20,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: start.addingTimeInterval(15),
+                        endDate: start.addingTimeInterval(35)
+                    )
+                ]
+            ),
+            route: points
+        )
+        let report = WorkoutReportBuilder().makeReport(from: session)
+        let cardio = try #require(report.cardio)
+        #expect(session.route.count == 6)
+        #expect(cardio.routePointCount == 4)
+        #expect(cardio.routeDistanceMeters != nil)
+        #expect((cardio.routeDistanceMeters ?? 0) > 200)
+        #expect((cardio.routeDistanceMeters ?? 0) < 250)
+        #expect(cardio.elevationGainMeters == 5)
+        #expect(cardio.splits.map(\.index) == [1, 2])
+        #expect(report.summary.distanceMeters == cardio.routeDistanceMeters)
+    }
+
+    @Test("Pause without GPS fixes must not create a route bridge")
+    func pauseGapWithoutPointsDoesNotInflateDistance() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let points = [
+            routePoint(timestamp: start, latitude: 37.500, altitude: 10, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(10), latitude: 37.501, altitude: 12, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(40), latitude: 37.530, altitude: 15, verticalAccuracy: 5),
+            routePoint(timestamp: start.addingTimeInterval(50), latitude: 37.531, altitude: 18, verticalAccuracy: 5)
+        ]
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling",
+                name: "Cycling",
+                category: "cardio",
+                type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(60),
+                elapsedDuration: 60,
+                activeDuration: 40,
+                pausedDuration: 20,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: start.addingTimeInterval(15),
+                        endDate: start.addingTimeInterval(35)
+                    )
+                ]
+            ),
+            route: points
+        )
+        let cardio = try #require(WorkoutReportBuilder().makeReport(from: session).cardio)
+        #expect((cardio.routeDistanceMeters ?? 0) > 200)
+        #expect((cardio.routeDistanceMeters ?? 0) < 250)
+    }
+
 }
 
 private extension WorkoutReportBuilderTests {

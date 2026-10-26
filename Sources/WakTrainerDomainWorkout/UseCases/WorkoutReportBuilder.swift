@@ -52,8 +52,8 @@ private extension WorkoutReportBuilder {
         from session: WorkoutSession
     ) -> WorkoutReportSummary {
         let health = session.health.summary
-        let routeDistance = routeDistance(
-            from: session.route
+        let routeDistance = activeRouteDistance(
+            from: session
         )
 
         return WorkoutReportSummary(
@@ -278,8 +278,8 @@ private extension WorkoutReportBuilder {
         }
 
         let health = session.health.summary
-        let routeDistance = routeDistance(
-            from: session.route
+        let routeDistance = activeRouteDistance(
+            from: session
         )
 
         let distance =
@@ -320,9 +320,9 @@ private extension WorkoutReportBuilder {
                 routeAverageSpeed,
             maximumSpeedMetersPerSecond:
                 health.maximumSpeedMetersPerSecond ??
-                maximumRouteSpeed(
-                    from: session.route
-                ),
+                activeRouteSegments(from: session)
+                    .compactMap { maximumRouteSpeed(from: $0) }
+                    .max(),
             averagePaceSecondsPerKilometer:
                 averagePace,
             averageCadence:
@@ -331,15 +331,12 @@ private extension WorkoutReportBuilder {
                 health.averagePowerWatts,
             elevationGainMeters:
                 health.elevationGainMeters ??
-                elevationGain(
-                    from: session.route
-                ),
+                activeElevationGain(from: session),
             routePointCount:
-                session.route.count,
+                activeRouteSegments(from: session)
+                    .reduce(0) { $0 + $1.count },
             splits:
-                cardioSplits(
-                    from: session.route
-                )
+                activeCardioSplits(from: session)
         )
     }
 
@@ -415,6 +412,47 @@ private extension WorkoutReportBuilder {
 
         return accuracy >= 0 &&
         accuracy <= 20
+    }
+
+    func activeRouteSegments(
+        from session: WorkoutSession
+    ) -> [[WorkoutRoutePoint]] {
+        WorkoutActivitySamplePartition(
+            pauseIntervals: session.timing.pauseIntervals
+        ).activeRouteSegments(from: session.route)
+    }
+
+    func activeElevationGain(
+        from session: WorkoutSession
+    ) -> Double? {
+        let gains = activeRouteSegments(from: session)
+            .compactMap { elevationGain(from: $0) }
+        guard !gains.isEmpty else { return nil }
+        return gains.reduce(0, +)
+    }
+
+    func activeCardioSplits(
+        from session: WorkoutSession
+    ) -> [WorkoutCardioSplit] {
+        let splits = activeRouteSegments(from: session)
+            .flatMap { cardioSplits(from: $0) }
+        return splits.enumerated().map { offset, split in
+            WorkoutCardioSplit(
+                index: offset + 1,
+                distanceMeters: split.distanceMeters,
+                duration: split.duration,
+                paceSecondsPerKilometer: split.paceSecondsPerKilometer
+            )
+        }
+    }
+
+    func activeRouteDistance(
+        from session: WorkoutSession
+    ) -> Double? {
+        let distances = activeRouteSegments(from: session)
+            .compactMap { routeDistance(from: $0) }
+        guard !distances.isEmpty else { return nil }
+        return distances.reduce(0, +)
     }
 
     func routeDistance(
