@@ -102,6 +102,27 @@ struct WorkoutReportBuilderTests {
         #expect(report.summary.activeCalories == 240)
     }
 
+    @Test("near-zero cardio distance never produces an enormous average pace")
+    func nearZeroCardioDistanceHasNoPace() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "cycling", name: "Cycling",
+                category: "cardio", type: .dynamicWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start, endDate: start.addingTimeInterval(9_663),
+                elapsedDuration: 9_663, activeDuration: 9_663,
+                pausedDuration: 0
+            ),
+            health: WorkoutHealthData(
+                summary: WorkoutHealthSummary(distanceMeters: 0.000113)
+            )
+        )
+        let cardio = try #require(WorkoutReportBuilder().makeReport(from: session).cardio)
+        #expect(cardio.averagePaceSecondsPerKilometer == nil)
+    }
+
     @Test("유산소 리포트는 거리와 active duration으로 평균 pace를 계산한다")
     func cardioReportCalculatesPaceAndElevation() throws {
         let start = Date(

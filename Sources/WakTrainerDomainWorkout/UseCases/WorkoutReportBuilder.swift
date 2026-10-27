@@ -356,12 +356,15 @@ private extension WorkoutReportBuilder {
 
         let averagePace: TimeInterval?
 
+        // Near-zero GPS drift is not usable distance for a pace estimate.
+        // Reject a pace above 60 min/km as non-representative rather than
+        // displaying enormous values for an effectively stationary session.
         if let distance,
-           distance > 0,
+           distance.isFinite,
+           distance >= 10,
            session.timing.activeDuration > 0 {
-            averagePace =
-                session.timing.activeDuration /
-                (distance / 1_000)
+            let pace = session.timing.activeDuration / (distance / 1_000)
+            averagePace = pace.isFinite && pace <= 3_600 ? pace : nil
         } else {
             averagePace = nil
         }
