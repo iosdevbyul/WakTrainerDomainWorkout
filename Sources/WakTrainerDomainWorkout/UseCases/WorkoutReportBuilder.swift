@@ -215,7 +215,7 @@ private extension WorkoutReportBuilder {
             let start = max(sample.startDate, session.timing.startDate)
             let nextStart = index + 1 < ordered.count
                 ? ordered[index + 1].startDate : sample.endDate
-            let end = min(workoutEnd, max(sample.endDate, min(nextStart, sample.startDate.addingTimeInterval(15))))
+            let end = min(workoutEnd, nextStart, sample.startDate.addingTimeInterval(15))
             guard end > start else { continue }
             let overlaps = pauses.reduce(0.0) { total, pause in
                 total + max(0, min(end, pause.endDate).timeIntervalSince(max(start, pause.startDate)))
