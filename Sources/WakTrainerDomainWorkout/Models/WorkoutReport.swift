@@ -96,19 +96,25 @@ public struct WorkoutHeartRateZone: Equatable, Sendable {
     public let upperBoundBPM: Double?
     public let sampleCount: Int
     public let samplePercentage: Double
+    public let activeDuration: TimeInterval
+    public let activeDurationPercentage: Double
 
     public init(
         level: WorkoutHeartRateZoneLevel,
         lowerBoundBPM: Double,
         upperBoundBPM: Double?,
         sampleCount: Int,
-        samplePercentage: Double
+        samplePercentage: Double,
+        activeDuration: TimeInterval = 0,
+        activeDurationPercentage: Double = 0
     ) {
         self.level = level
         self.lowerBoundBPM = lowerBoundBPM
         self.upperBoundBPM = upperBoundBPM
         self.sampleCount = sampleCount
         self.samplePercentage = samplePercentage
+        self.activeDuration = activeDuration
+        self.activeDurationPercentage = activeDurationPercentage
     }
 }
 
