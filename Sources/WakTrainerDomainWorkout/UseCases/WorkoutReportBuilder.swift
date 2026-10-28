@@ -162,12 +162,13 @@ private extension WorkoutReportBuilder {
             maximumHeartRate:
                 hasPauses ? statistics?.maximum : session.health.summary.maximumHeartRate,
             sampleCount: samples.count,
-            zones: makeHeartRateZones(from: samples)
+            zones: makeHeartRateZones(from: samples, session: session)
         )
     }
 
     func makeHeartRateZones(
-        from samples: [WorkoutHealthMetricSample]
+        from samples: [WorkoutHealthMetricSample],
+        session: WorkoutSession
     ) -> [WorkoutHeartRateZone] {
         guard let maximumHeartRate,
               !samples.isEmpty else {
@@ -201,6 +202,36 @@ private extension WorkoutReportBuilder {
             }
         }
 
+        // A reading represents the interval until the next reading, limited
+        // to 15 seconds to avoid inventing time during data collection gaps.
+        // Paused intervals and time outside the session are excluded.
+        let ordered = samples.filter { $0.value.isFinite && $0.value > 0 }
+            .sorted { $0.startDate < $1.startDate }
+        var durations = Array(repeating: 0.0, count: 5)
+        let workoutEnd = session.timing.endDate ?? Date.distantPast
+        let pauses = session.timing.pauseIntervals
+        for index in ordered.indices {
+            let sample = ordered[index]
+            let start = max(sample.startDate, session.timing.startDate)
+            let nextStart = index + 1 < ordered.count
+                ? ordered[index + 1].startDate : sample.endDate
+            let end = min(workoutEnd, max(sample.endDate, min(nextStart, sample.startDate.addingTimeInterval(15))))
+            guard end > start else { continue }
+            let overlaps = pauses.reduce(0.0) { total, pause in
+                total + max(0, min(end, pause.endDate).timeIntervalSince(max(start, pause.startDate)))
+            }
+            let elapsed = max(0, end.timeIntervalSince(start) - overlaps)
+            let zoneIndex: Int
+            switch sample.value {
+            case ..<boundaries[0]: zoneIndex = 0
+            case ..<boundaries[1]: zoneIndex = 1
+            case ..<boundaries[2]: zoneIndex = 2
+            case ..<boundaries[3]: zoneIndex = 3
+            default: zoneIndex = 4
+            }
+            durations[zoneIndex] += elapsed
+        }
+        let measuredDuration = durations.reduce(0, +)
         let total = Double(samples.count)
 
         return WorkoutHeartRateZoneLevel.allCases.map {
@@ -235,7 +266,9 @@ private extension WorkoutReportBuilder {
                 upperBoundBPM: upperBound,
                 sampleCount: counts[index],
                 samplePercentage:
-                    Double(counts[index]) / total * 100
+                    Double(counts[index]) / total * 100,
+                activeDuration: durations[index],
+                activeDurationPercentage: measuredDuration > 0 ? durations[index] / measuredDuration * 100 : 0
             )
         }
     }
