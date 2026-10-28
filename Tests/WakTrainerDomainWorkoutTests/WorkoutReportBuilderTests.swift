@@ -674,4 +674,56 @@ private extension WorkoutReportBuilderTests {
             course: nil
         )
     }
+    @Test("Heart rate zone duration excludes pauses and caps sample gaps")
+    func heartRateZoneActiveDurationExcludesPauses() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func sample(_ second: Double, _ bpm: Double) -> WorkoutHealthMetricSample {
+            WorkoutHealthMetricSample(
+                metric: .heartRate,
+                startDate: start.addingTimeInterval(second),
+                endDate: start.addingTimeInterval(second + 1),
+                value: bpm,
+                unit: "bpm"
+            )
+        }
+        let session = WorkoutSession(
+            workout: WorkoutIdentity(
+                workoutID: "strength",
+                name: "Strength",
+                category: "strength",
+                type: .staticWorkout
+            ),
+            timing: WorkoutTiming(
+                startDate: start,
+                endDate: start.addingTimeInterval(70),
+                elapsedDuration: 70,
+                activeDuration: 60,
+                pausedDuration: 10,
+                pauseIntervals: [
+                    WorkoutPauseInterval(
+                        startDate: start.addingTimeInterval(15),
+                        endDate: start.addingTimeInterval(25)
+                    )
+                ]
+            ),
+            health: WorkoutHealthData(
+                samples: [
+                    sample(0, 100), sample(10, 140),
+                    sample(30, 165), sample(60, 185)
+                ]
+            )
+        )
+        let zones = WorkoutReportBuilder(maximumHeartRate: 200)
+            .makeReport(from: session).heart.zones
+        #expect(zones.count == 5)
+        // 0-10: Zone 1, 10-15: Zone 3 (15-25 pause), 30-45: Zone 4,
+        // 60-61: Zone 5. 45-60 is not covered by a sample.
+        #expect(zones[0].activeDuration == 10)
+        #expect(zones[2].activeDuration == 5)
+        #expect(zones[3].activeDuration == 15)
+        #expect(zones[4].activeDuration == 1)
+        #expect(zones.map(\.activeDuration).reduce(0, +) == 31)
+        #expect(abs(zones.map(\.activeDurationPercentage).reduce(0, +) - 100) < 0.001)
+    }
+
 }
